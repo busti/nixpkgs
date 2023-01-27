@@ -259,30 +259,6 @@ let
         ''}
       '';
 
-    script = concatStringsSep " \\\n  " ([
-      "exec ${cfg.backend} run"
-      "--rm"
-      "--name=${escapedName}"
-      "--log-driver=${container.log-driver}"
-    ] ++ optional (container.entrypoint != null)
-      "--entrypoint=${escapeShellArg container.entrypoint}"
-      ++ lib.optionals (cfg.backend == "podman") [
-        "--cidfile=/run/podman-${escapedName}.ctr-id"
-        "--cgroups=no-conmon"
-        "--sdnotify=conmon"
-        "-d"
-        "--replace"
-      ] ++ (mapAttrsToList (k: v: "-e ${escapeShellArg k}=${escapeShellArg v}") container.environment)
-      ++ map (f: "--env-file ${escapeShellArg f}") container.environmentFiles
-      ++ map (p: "-p ${escapeShellArg p}") container.ports
-      ++ optional (container.user != null) "-u ${escapeShellArg container.user}"
-      ++ map (v: "-v ${escapeShellArg v}") container.volumes
-      ++ optional (container.workdir != null) "-w ${escapeShellArg container.workdir}"
-      ++ map escapeShellArg container.extraOptions
-      ++ [container.image]
-      ++ map escapeShellArg container.cmd
-    );
-
     preStop = if cfg.backend == "podman"
       then "[ $SERVICE_RESULT = success ] || podman stop --ignore --cidfile=/run/podman-${escapedName}.ctr-id"
       else "[ $SERVICE_RESULT = success ] || ${cfg.backend} stop ${name}";
@@ -310,6 +286,30 @@ let
       TimeoutStartSec = 0;
       TimeoutStopSec = 120;
       Restart = "always";
+
+      ExecStart = concatStringsSep " \\\n  " ([
+        "exec ${cfg.backend} run"
+        "--rm"
+        "--name=${escapedName}"
+        "--log-driver=${container.log-driver}"
+      ] ++ optional (container.entrypoint != null)
+        "--entrypoint=${escapeShellArg container.entrypoint}"
+        ++ lib.optionals (cfg.backend == "podman") [
+          "--cidfile=/%t/%n.ctr-id"
+          "--cgroups=no-conmon"
+          "--sdnotify=conmon"
+          "-d"
+          "--replace"
+        ] ++ (mapAttrsToList (k: v: "-e ${escapeShellArg k}=${escapeShellArg v}") container.environment)
+        ++ map (f: "--env-file ${escapeShellArg f}") container.environmentFiles
+        ++ map (p: "-p ${escapeShellArg p}") container.ports
+        ++ optional (container.user != null) "-u ${escapeShellArg container.user}"
+        ++ map (v: "-v ${escapeShellArg v}") container.volumes
+        ++ optional (container.workdir != null) "-w ${escapeShellArg container.workdir}"
+        ++ map escapeShellArg container.extraOptions
+        ++ [container.image]
+        ++ map escapeShellArg container.cmd
+      );
     } // optionalAttrs (cfg.backend == "podman") {
       Environment="PODMAN_SYSTEMD_UNIT=podman-${name}.service";
       Type="notify";
