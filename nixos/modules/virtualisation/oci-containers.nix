@@ -264,7 +264,7 @@ let
     ] ++ optional (container.entrypoint != null)
       "--entrypoint=${escapeShellArg container.entrypoint}"
       ++ lib.optionals (cfg.backend == "podman") [
-        "--cidfile=/run/podman-${escapedName}.ctr-id"
+        "--cidfile=$1" ### The cidfile is passed as the first argument to the script when using podman.
         "--cgroups=no-conmon"
         "--sdnotify=conmon"
         "-d"
@@ -279,6 +279,9 @@ let
       ++ [container.image]
       ++ map escapeShellArg container.cmd
     );
+
+    ### podman needs a file to store the container id which has to be provided from within the systemd unit file.
+    scriptArgs = lib.mkIf (cfg.backend == "podman") "/%t/%n.ctr-id";
 
     preStop = if cfg.backend == "podman"
       then "[ $SERVICE_RESULT = success ] || podman stop --ignore --cidfile=/run/podman-${escapedName}.ctr-id"
