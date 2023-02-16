@@ -245,7 +245,10 @@ let
 
     path =
       if cfg.backend == "docker" then [ config.virtualisation.docker.package ]
-      else if cfg.backend == "podman" then [ config.virtualisation.podman.package ]
+      else if cfg.backend == "podman" then [
+        config.virtualisation.podman.package
+        (lib.mkIf (container.systemUser != null) pkgs.su)
+      ]
       else throw "Unhandled backend: ${cfg.backend}";
 
     preStart = ''
