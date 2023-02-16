@@ -262,8 +262,8 @@ let
       ''}
       ${optionalString (cfg.backend == "podman") ''
         rm -f /run/podman-${escapedName}/
+        mkdir -p /run/podman-${escapedName}/
         ${optionalString (container.systemUser != null) ''
-          mkdir -p /run/podman-${escapedName}/
           chown ${container.systemUser} /run/podman-${escapedName}/
         ''}
       ''}
@@ -294,10 +294,10 @@ let
     );
 
     preStop = if cfg.backend == "podman"
-      then "[ $SERVICE_RESULT = success ] || podman stop --ignore --cidfile=/run/podman-${escapedName}.ctr-id"
+      then "[ $SERVICE_RESULT = success ] || podman stop --ignore --cidfile=/run/podman-${escapedName}/ctr-id"
       else "[ $SERVICE_RESULT = success ] || ${cfg.backend} stop ${name}";
     postStop =  if cfg.backend == "podman"
-      then "podman rm -f --ignore --cidfile=/run/podman-${escapedName}/"
+      then "podman rm -f --ignore --cidfile=/run/podman-${escapedName}/ctr-id"
       else "${cfg.backend} rm -f ${name} || true";
 
     serviceConfig = {
