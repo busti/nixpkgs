@@ -261,7 +261,7 @@ let
         ${cfg.backend} load -i ${container.imageFile}
       ''}
       ${optionalString (cfg.backend == "podman") ''
-        rm -f /run/podman-${escapedName}/
+        rm -rf /run/podman-${escapedName}/
         mkdir -p /run/podman-${escapedName}/
         ${optionalString (container.systemUser != null) ''
           chown ${container.systemUser} /run/podman-${escapedName}/
