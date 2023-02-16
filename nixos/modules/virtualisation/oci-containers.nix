@@ -220,6 +220,15 @@ let
             If this option is set to false, the container has to be started on-demand via its service.
           '';
         };
+
+        systemUser = mkOption {
+          type = with types; nullOr str;
+          default = null;
+          description = lib.mdDoc ''
+            Override the username used to run the container.
+            User needs to be created separately.
+          '';
+        };
       };
     };
 
@@ -247,14 +256,18 @@ let
             ${container.login.registry} \
             --username ${container.login.username} \
             --password-stdin
-        ''}
+      ''}
       ${optionalString (container.imageFile != null) ''
         ${cfg.backend} load -i ${container.imageFile}
-        ''}
+      ''}
       ${optionalString (cfg.backend == "podman") ''
-        rm -f /run/podman-${escapedName}.ctr-id
+        rm -f /run/podman-${escapedName}/
+        ${optionalString (container.systemUser != null) ''
+          mkdir -p /run/podman-${escapedName}/
+          chown ${container.systemUser} /run/podman-${escapedName}/
         ''}
-      '';
+      ''}
+    '';
 
     script = concatStringsSep " \\\n  " ([
       "exec ${cfg.backend} run"
@@ -264,7 +277,7 @@ let
     ] ++ optional (container.entrypoint != null)
       "--entrypoint=${escapeShellArg container.entrypoint}"
       ++ lib.optionals (cfg.backend == "podman") [
-        "--cidfile=$1" ### The cidfile is passed as the first argument to the script when using podman.
+        "--cidfile=/run/podman-${escapedName}/ctr-id"
         "--cgroups=no-conmon"
         "--sdnotify=conmon"
         "-d"
@@ -280,14 +293,11 @@ let
       ++ map escapeShellArg container.cmd
     );
 
-    ### podman needs a file to store the container id which has to be provided from within the systemd unit file.
-    scriptArgs = lib.mkIf (cfg.backend == "podman") "/%t/%n.ctr-id";
-
     preStop = if cfg.backend == "podman"
       then "[ $SERVICE_RESULT = success ] || podman stop --ignore --cidfile=/run/podman-${escapedName}.ctr-id"
       else "[ $SERVICE_RESULT = success ] || ${cfg.backend} stop ${name}";
     postStop =  if cfg.backend == "podman"
-      then "podman rm -f --ignore --cidfile=/run/podman-${escapedName}.ctr-id"
+      then "podman rm -f --ignore --cidfile=/run/podman-${escapedName}/"
       else "${cfg.backend} rm -f ${name} || true";
 
     serviceConfig = {
@@ -310,11 +320,18 @@ let
       TimeoutStartSec = 0;
       TimeoutStopSec = 120;
       Restart = "always";
-    } // optionalAttrs (cfg.backend == "podman") {
-      Environment="PODMAN_SYSTEMD_UNIT=podman-${name}.service";
-      Type="notify";
-      NotifyAccess="all";
-    };
+    } // optionalAttrs (cfg.backend == "podman") (lib.mkMerge [
+      {
+        Environment="PODMAN_SYSTEMD_UNIT=podman-${name}.service";
+        Type="notify";
+        NotifyAccess="all";
+      }
+      (lib.mkIf (container.systemUser != null) {
+        User = container.systemUser;
+        WorkingDirectory = "/home/${container.systemUser}";
+        PermissionsStartOnly = true;
+      })
+    ]);
   };
 
 in {
